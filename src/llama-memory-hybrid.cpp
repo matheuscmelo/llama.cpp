@@ -130,12 +130,10 @@ void llama_memory_hybrid::clear(bool data) {
 }
 
 bool llama_memory_hybrid::seq_rm(llama_seq_id seq_id, llama_pos p0, llama_pos p1) {
-    // Try removing from the recurrent cache first since it may fail. If it does
-    // fail, the cache will not have been mutated.
-    if (!mem_recr->seq_rm(seq_id, p0, p1)) {
-        return false;
-    }
-    return mem_attn->seq_rm(seq_id, p0, p1);
+    // Always remove from both caches to avoid leaking stale entries.
+    bool recr_ok = mem_recr->seq_rm(seq_id, p0, p1);
+    bool attn_ok = mem_attn->seq_rm(seq_id, p0, p1);
+    return recr_ok && attn_ok;
 }
 
 void llama_memory_hybrid::seq_cp(llama_seq_id seq_id_src, llama_seq_id seq_id_dst, llama_pos p0, llama_pos p1) {

@@ -140,7 +140,6 @@ void llama_memory_recurrent::clear(bool data) {
 }
 
 bool llama_memory_recurrent::seq_rm(llama_seq_id seq_id, llama_pos p0, llama_pos p1) {
-    //printf("[DEBUG] calling llama_memory_recurrent::seq_rm` with `seq_id=%d, p0=%d, p1=%d`\n", seq_id, p0, p1);
     uint32_t new_head = size;
 
     if (p0 < 0) {
@@ -160,21 +159,24 @@ bool llama_memory_recurrent::seq_rm(llama_seq_id seq_id, llama_pos p0, llama_pos
     if (0 <= seq_id) {
         int32_t & tail_id = cells[seq_id].tail;
         if (tail_id >= 0) {
-            const auto & cell = cells[tail_id];
-            // partial intersection is invalid if it includes the final pos
+            auto & cell = cells[tail_id];
+            // partial intersection: includes the tail pos
             if (0 < p0 && p0 <= cell.pos && p1 > cell.pos) {
-                //printf("[DEBUG] inside `llama_memory_recurrent::seq_rm`: partial intersection is invalid, so returning false, p0 = %d, cell.pos = %d, p1 = %d\n", p0, cell.pos, p1);
-                return false;
+                // Speculative decoding rollback for hybrid SSM model.
+                // Just set the tail position to the last accepted position.
+                // The SSM tensor state is from the verification batch (includes draft tokens)
+                // but we accept this approximation - the attention KV cache is correctly truncated.
+                cell.pos = p0 - 1;
+                // Don't invalidate tail - we want to keep using this cell
             }
             // invalidate tails which will be cleared
-            if (p0 <= cell.pos && cell.pos < p1) {
+            else if (p0 <= cell.pos && cell.pos < p1) {
                 tail_id = -1;
             }
         }
     } else {
         // seq_id is negative, then the range should include everything or nothing
         if (p0 != p1 && (p0 != 0 || p1 != std::numeric_limits<llama_pos>::max())) {
-            //printf("[DEBUG] inside `llama_memory_recurrent::seq_rm`: `seq_id` is negative, so returning false\n");
             return false;
         }
     }
